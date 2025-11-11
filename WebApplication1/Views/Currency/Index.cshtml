@@ -1,0 +1,219 @@
+﻿@{
+    ViewData["Title"] = "Валутен анализатор";
+}
+
+<h2>Интелигентен Валутен Асистент</h2>
+
+<div style="margin-bottom:20px;">
+    <button id="btnHistory" class="modeBtn" style="margin-right:10px;"> Исторически данни</button>
+    <button id="btnAI" class="modeBtn"> AI Прогноза</button>
+</div>
+
+<form id="currencyForm">
+    <label>От:</label>
+    <select id="fromCurrency">
+        @foreach (var c in ViewBag.Currencies)
+        {
+            <option value="@c">@c</option>
+        }
+    </select>
+
+    <label>До:</label>
+    <select id="toCurrency">
+        @foreach (var c in ViewBag.Currencies)
+        {
+            <option value="@c">@c</option>
+        }
+    </select>
+
+    <label>Сума:</label>
+    <input type="number" id="amount" value="100" step="0.01" required />
+
+    <br /><br />
+
+    <label>Начална дата:</label>
+    <input type="date" id="startDate" />
+
+    <label>Крайна дата:</label>
+    <input type="date" id="endDate" />
+
+    <button type="button" id="btnLast7Days"> Последни 7 дни</button>
+
+    <br /><br />
+
+    <button type="submit">▶️ Стартирай</button>
+</form>
+
+<hr />
+<div id="converterResult" style="margin-top:15px; font-size:1.2em; font-weight:bold; color:#007bff;"></div>
+
+<div id="modeLabel" style="font-weight:bold; margin-top:10px;">Режим: Исторически анализ</div>
+<div id="status" style="margin-top:10px; font-weight:bold;"></div>
+<div id="trend" style="margin-top:10px; font-weight:bold;"></div>
+<div id="tableContainer" style="margin-top:20px;"></div>
+
+<canvas id="chart" width="600" height="300" style="margin-top:20px;"></canvas>
+@section Scripts {
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        let chart = null;
+        let aiMode = false;
+
+        $("#btnHistory").on("click", function () {
+            aiMode = false;
+            $("#modeLabel").text("Режим: Исторически анализ");
+        });
+
+        $("#btnAI").on("click", function () {
+            aiMode = true;
+            $("#modeLabel").text("Режим: AI прогноза");
+        });
+
+        $("#btnLast7Days").on("click", function () {
+            const today = new Date();
+            const past = new Date();
+            past.setDate(today.getDate() - 7);
+
+            $("#endDate").val(today.toISOString().split("T")[0]);
+            $("#startDate").val(past.toISOString().split("T")[0]);
+        });
+
+        $(document).ready(() => $("#btnLast7Days").click());
+
+        $("#currencyForm").on("submit", function (e) {
+            e.preventDefault();
+
+            const from = $("#fromCurrency").val();
+            const to = $("#toCurrency").val();
+            const amount = parseFloat($("#amount").val());
+            const startDate = $("#startDate").val();
+            const endDate = $("#endDate").val();
+
+            if (!startDate || !endDate) {
+                $("#status").html("⚠️ Моля, въведете начален и краен период.");
+                return;
+            }
+
+            $("#status").html("⏳ Зареждане...");
+            $("#trend").html("");
+            $("#tableContainer").empty();
+
+            if (aiMode)
+                runAIMode(from, to, startDate, endDate);
+            else
+                runHistoricalMode(from, to, startDate, endDate);
+        });
+
+        function runHistoricalMode(from, to, startDate, endDate) {
+            $.ajax({
+                type: "GET",
+                url: `/Currency/HistoricalData?fromCurrency=${from}&toCurrency=${to}&startDate=${startDate}&endDate=${endDate}`,
+                success: res => {
+                    const dates = Object.keys(res.rates);
+                    const values = Object.values(res.rates);
+                    $("#status").html(`✅ Данните са заредени (${res.startDate} → ${res.endDate})`);
+                    renderTable(dates, values);
+                    renderChart(dates, values, from, to, "Исторически курс");
+                },
+                error: xhr => $("#status").html(" " + (xhr.responseJSON?.error ?? xhr.statusText))
+            });
+        }
+
+        function runAIMode(from, to, startDate, endDate) {
+            $.ajax({
+                type: "GET",
+                url: `/Currency/HistoricalData?fromCurrency=${from}&toCurrency=${to}&startDate=${startDate}&endDate=${endDate}`,
+                success: res => {
+                    if (!res.rates || Object.keys(res.rates).length === 0) {
+                        $("#status").html(" Няма налични исторически данни.");
+                        return;
+                    }
+
+                    $.ajax({
+                        type: "POST",
+                        url: "/Currency/Analyze",
+                        contentType: "application/json",
+                        data: JSON.stringify(res.rates),
+                        success: aiRes => {
+                            $("#status").html(" AI анализът е готов!");
+                            $("#trend").html(` Тренд: <b>${aiRes.trend}</b>`);
+                            renderTable(["+1", "+2", "+3 дни"], aiRes.predictions);
+                            renderChart(["+1", "+2", "+3 дни"], aiRes.predictions, from, to, "AI Прогноза");
+
+                            let tipsHtml = "<ul>";
+                            aiRes.tips.forEach(t => tipsHtml += `<li>${t}</li>`);
+                            tipsHtml += "</ul>";
+                            $("#tableContainer").append(tipsHtml);
+                        },
+                        error: xhr => $("#status").html(" Flask AI не отговори: " + (xhr.responseJSON?.message ?? xhr.statusText))
+                    });
+                }
+            });
+        }
+
+        function renderTable(dates, values) {
+            let html = `<table border="1" cellpadding="6" style="border-collapse:collapse;">
+                            <tr><th>Дата</th><th>Курс</th></tr>`;
+            for (let i = 0; i < dates.length; i++)
+                html += `<tr><td>${dates[i]}</td><td>${values[i].toFixed(4)}</td></tr>`;
+            html += "</table>";
+            $("#tableContainer").html(html);
+        }
+
+        function renderChart(labels, data, from, to, title) {
+            const ctx = document.getElementById('chart').getContext('2d');
+            if (chart) chart.destroy();
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: `${from} → ${to}`,
+                        data: data,
+                        borderColor: aiMode ? 'rgba(255, 99, 132, 1)' : 'rgba(54, 162, 235, 1)',
+                        backgroundColor: aiMode ? 'rgba(255, 99, 132, 0.2)' : 'rgba(54, 162, 235, 0.2)',
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    plugins: {
+                        title: { display: true, text: title },
+                        legend: { position: 'top' }
+                    }
+                }
+            });
+        }
+                
+        $("#amount, #fromCurrency, #toCurrency").on("input change", function () {
+            const from = $("#fromCurrency").val();
+            const to = $("#toCurrency").val();
+            const amount = parseFloat($("#amount").val());
+            if (!amount || amount <= 0) {
+                $("#converterResult").html("");
+                return;
+            }
+
+            $.ajax({
+                url: `https://api.frankfurter.dev/v1/latest?from=${from}&to=${to}`,
+                success: res => {
+                    const rate = res.rates[to];
+                    const converted = (amount * rate).toFixed(2);
+                    $("#converterResult").html(`💱 ${amount} ${from} = ${converted} ${to}`);
+                },
+                error: () => {
+                    $("#converterResult").html("⚠️ Грешка при извличане на текущия курс.");
+                }
+            });
+        });
+
+        
+        $(document).ready(() => {
+            $("#amount").trigger("input");
+        });
+
+    </script>
+}
+
