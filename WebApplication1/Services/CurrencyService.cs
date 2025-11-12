@@ -22,6 +22,10 @@ namespace WebApplication1.Services
 
         public async Task<Dictionary<string, decimal>> GetHistoricalRates(string from, string to, DateTime start, DateTime end)
         {
+            // Convert input dates to UTC
+            start = start.Date.ToUniversalTime();
+            end = end.Date.ToUniversalTime();
+
             var cached = await _context.CurrencyHistoryCache
                 .FirstOrDefaultAsync(x => x.FromCurrency.ToUpper() == from.ToUpper()
                                        && x.ToCurrency.ToUpper() == to.ToUpper());
@@ -52,8 +56,8 @@ namespace WebApplication1.Services
                     {
                         FromCurrency = from,
                         ToCurrency = to,
-                        StartDate = start.Date,
-                        EndDate = end.Date,
+                        StartDate = start,
+                        EndDate = end,
                         DataJson = SystemTextJson.Serialize(existingData)
                     };
                     _context.CurrencyHistoryCache.Add(cached);
@@ -66,7 +70,6 @@ namespace WebApplication1.Services
                     _context.CurrencyHistoryCache.Update(cached);
                 }
 
-                // ✅ Wrap SaveChangesAsync with try-catch to see inner exception
                 try
                 {
                     await _context.SaveChangesAsync();
@@ -77,12 +80,12 @@ namespace WebApplication1.Services
                     Console.WriteLine(ex.Message);
                     if (ex.InnerException != null)
                         Console.WriteLine("Inner Exception: " + ex.InnerException.Message);
-                    throw; // rethrow after logging
+                    throw;
                 }
             }
 
             return existingData
-                .Where(d => DateTime.Parse(d.Key) >= start && DateTime.Parse(d.Key) <= end)
+                .Where(d => DateTime.Parse(d.Key).ToUniversalTime() >= start && DateTime.Parse(d.Key).ToUniversalTime() <= end)
                 .ToDictionary(d => d.Key, d => d.Value);
         }
 
