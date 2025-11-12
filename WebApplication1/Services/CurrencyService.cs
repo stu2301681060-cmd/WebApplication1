@@ -22,7 +22,6 @@ namespace WebApplication1.Services
 
         public async Task<Dictionary<string, decimal>> GetHistoricalRates(string from, string to, DateTime start, DateTime end)
         {
-            // Case-insensitive search for PostgreSQL
             var cached = await _context.CurrencyHistoryCache
                 .FirstOrDefaultAsync(x => x.FromCurrency.ToUpper() == from.ToUpper()
                                        && x.ToCurrency.ToUpper() == to.ToUpper());
@@ -35,7 +34,6 @@ namespace WebApplication1.Services
                                ?? new Dictionary<string, decimal>();
             }
 
-            // Determine if we need to fetch new data
             bool needsFetch = cached == null || start < cached.StartDate || end > cached.EndDate;
 
             if (needsFetch)
@@ -68,10 +66,21 @@ namespace WebApplication1.Services
                     _context.CurrencyHistoryCache.Update(cached);
                 }
 
-                await _context.SaveChangesAsync();
+                // ✅ Wrap SaveChangesAsync with try-catch to see inner exception
+                try
+                {
+                    await _context.SaveChangesAsync();
+                }
+                catch (DbUpdateException ex)
+                {
+                    Console.WriteLine("⚠️ Error saving CurrencyHistoryCache:");
+                    Console.WriteLine(ex.Message);
+                    if (ex.InnerException != null)
+                        Console.WriteLine("Inner Exception: " + ex.InnerException.Message);
+                    throw; // rethrow after logging
+                }
             }
 
-            // Return only the requested date range
             return existingData
                 .Where(d => DateTime.Parse(d.Key) >= start && DateTime.Parse(d.Key) <= end)
                 .ToDictionary(d => d.Key, d => d.Value);
