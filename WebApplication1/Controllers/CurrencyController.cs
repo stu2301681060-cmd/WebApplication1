@@ -49,16 +49,18 @@ namespace WebApplication1.Controllers
                 return BadRequest(new { error = ex.Message });
             }
         }
-
         [HttpGet("Currency/HistoricalData")]
-        public async Task<IActionResult> GetHistoricalData(string fromCurrency, string toCurrency, DateTime? startDate, DateTime? endDate)
+        public async Task<IActionResult> GetHistoricalData(string fromCurrency, string toCurrency, string startDate, string endDate)
         {
-            if (!startDate.HasValue || !endDate.HasValue)
+            if (string.IsNullOrEmpty(startDate) || string.IsNullOrEmpty(endDate))
                 return BadRequest(new { error = "Моля, изберете начален и краен период." });
+
+            if (!DateTime.TryParse(startDate, out DateTime start) || !DateTime.TryParse(endDate, out DateTime end))
+                return BadRequest(new { error = "Невалиден формат на датата. Използвайте YYYY-MM-DD." });
 
             try
             {
-                var rates = await _currencyService.GetHistoricalRates(fromCurrency, toCurrency, startDate.Value, endDate.Value);
+                var rates = await _currencyService.GetHistoricalRates(fromCurrency, toCurrency, start, end);
 
                 if (rates == null || rates.Count == 0)
                     return NotFound(new { error = "⚠️ Няма налични данни за избрания период." });
@@ -68,8 +70,8 @@ namespace WebApplication1.Controllers
                     mode = "historical",
                     from = fromCurrency,
                     to = toCurrency,
-                    startDate,
-                    endDate,
+                    startDate = start.ToString("yyyy-MM-dd"),
+                    endDate = end.ToString("yyyy-MM-dd"),
                     rates
                 });
             }
@@ -79,9 +81,10 @@ namespace WebApplication1.Controllers
             }
         }
 
-     
 
-        
+
+
+
         [HttpPost("Currency/RunAIAnalysis")]
         public async Task<IActionResult> RunAIAnalysis([FromBody] AIRequest request)
         {
