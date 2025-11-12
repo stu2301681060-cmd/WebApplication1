@@ -18,7 +18,7 @@ namespace WebApplication1.Controllers
         public async Task<IActionResult> Analyze([FromBody] object data)
         {
             using var client = new HttpClient();
-            var response = await client.PostAsync("http://127.0.0.1:5001/analyze",
+            var response = await client.PostAsync("https://proekt-cwk0.onrender.com/analyze",
                 new StringContent(data.ToString(), System.Text.Encoding.UTF8, "application/json"));
 
             var json = await response.Content.ReadAsStringAsync();
