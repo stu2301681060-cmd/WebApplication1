@@ -14,13 +14,14 @@ builder.Services.AddScoped<PredictionService>();
 
 var app = builder.Build();
 
-// Auto-create database schema
+//  Automatically apply database migrations on startup
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated(); // create tables automatically if missing
+    db.Database.Migrate();
 }
 
+//  Standard middleware
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
@@ -29,10 +30,10 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
-
 app.UseRouting();
 app.UseAuthorization();
 
+//  Default route
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Currency}/{action=Index}/{id?}");
