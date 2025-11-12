@@ -1,5 +1,5 @@
 ﻿using System;
-using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace WebApplication1.Models
 {
@@ -10,6 +10,8 @@ namespace WebApplication1.Models
         public string ToCurrency { get; set; }
         public DateTime StartDate { get; set; }
         public DateTime EndDate { get; set; }
-        public string DataJson { get; set; } 
+
+        [Column(TypeName = "text")]  // or "jsonb"
+        public string DataJson { get; set; }
     }
 }
