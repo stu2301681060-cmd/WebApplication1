@@ -3,10 +3,9 @@ using WebApplication1.Data;
 using WebApplication1.Services;
 
 var builder = WebApplication.CreateBuilder(args);
-
-// ? Configure PostgreSQL for Render
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("PostgresConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
 
 // ? Register your services
 builder.Services.AddControllersWithViews();
